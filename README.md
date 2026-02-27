@@ -3,6 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/khqr-payment.svg)](https://pypi.org/project/khqr-payment/)
 [![Python](https://img.shields.io/pypi/pyversions/khqr-payment)](https://pypi.org/project/khqr-payment/)
 [![License](https://img.shields.io/pypi/l/khqr-payment)](https://github.com/henglyrepo/khqr-payment/blob/main/LICENSE)
+[![Sponsor](https://img.shields.io/badge/Sponsor-Buy%20Me%20a%20Coffee-orange)](https://buymeacoffee.com/hengly)
 
 A modern Python library for Bakong KHQR payment integration with a cleaner API, full type safety, and production-ready features.
 
@@ -98,25 +99,43 @@ from khqr_payment import KHQRClient, Merchant
 # 1. Initialize client with your token
 client = KHQRClient("your_bakong_token_here")
 
-# 2. Create merchant information
+# 2. Validate token before proceeding
+if client.validate_token():
+    print("Token is valid and working!")
+else:
+    print("Token is invalid or expired!")
+    client.close()
+    exit(1)
+
+# 3. Create merchant information
 merchant = Merchant(
-    bank_account="yourname@bank",  # Your Bakong account
-    name="Your Store Name",         # Max 25 characters
-    city="Phnom Penh"               # Your city
+    bank_account="yourname@bank",     # Your Bakong account ID
+    name="Your Store Name",           # Max 25 characters
+    city="Phnom Penh",                # Your city
+    store_label="Store Category",     # Optional: e.g., "Coffee Shop"
+    phone_number="85512345678",       # Optional: phone number
+    acquiring_bank="BANK_NAME",       # Optional: acquiring bank name
 )
 
-# 3. Create QR code for payment
-qr = client.create_qr(
-    merchant=merchant,
-    amount=100.00,    # How much to pay (USD or KHR)
-    currency="USD"    # Currency: USD or KHR
+# 4. Create QR code for payment
+qr = client.create_qr_string(
+    merchant="yourname@bank",         # Bank account
+    merchant_name="Your Store Name",  # Name shown to customer
+    merchant_city="Phnom Penh",
+    amount=100.00,                   # Payment amount
+    currency="USD",                   # USD or KHR
+    store_label="Store Category",
+    phone_number="85512345678",
+    bill_number="TRX12345678",        # Optional: transaction reference
+    terminal_label="Cashier-01",      # Optional: terminal ID
+    static=False,                     # False = Dynamic QR, True = Static QR
 )
 
-# 4. Show qr.string to customer (they scan it to pay)
+# 5. Show QR to customer (they scan it to pay)
 print(f"QR String: {qr.string}")
 print(f"MD5 Hash: {qr.md5}")  # Use this to verify payment later
 
-# 5. Close connection when done
+# 6. Close connection when done
 client.close()
 ```
 
@@ -129,19 +148,27 @@ client.close()
 Merchant represents your business/bank account:
 ```python
 merchant = Merchant(
-    bank_account="yourname@bank",  # Your Bakong ID (like email)
-    name="Store Name",             # Max 25 chars - shown to customer
-    city="Phnom Penh"              # Max 40 chars
+    bank_account="yourname@bank",     # Your Bakong ID (like email)
+    name="Store Name",                 # Max 25 chars - shown to customer
+    city="Phnom Penh",                 # Max 40 chars
+    store_label="Coffee Shop",         # Optional: store category
+    phone_number="85512345678",       # Optional: phone number
+    bill_number="TRX12345678",        # Optional: bill reference
+    terminal_label="Cashier-01",      # Optional: terminal ID
+    acquiring_bank="ACLB",            # Optional: acquiring bank name
+    static=False,                      # False = Dynamic, True = Static
+    language_preference="en",         # Optional: "en" or "kh"
 )
 ```
 
 ### What is `QRCode`?
 
-When you call `create_qr()`, you get back a QRCode object with:
+When you call `create_qr_string()`, you get back a QRCode object with:
 - `qr.string` - The raw QR data (show this to customer)
 - `qr.md5` - A unique hash to check payment status
 - `qr.amount` - The payment amount
 - `qr.currency` - USD or KHR
+- `qr.is_static` - True if static QR, False if dynamic
 
 ### What is a Deeplink?
 
@@ -188,21 +215,27 @@ Here's how a typical payment works:
 ### Full Example: Complete Payment
 
 ```python
+import time
 from khqr_payment import KHQRClient, Merchant
 
 # Setup
 client = KHQRClient("your_token")
-merchant = Merchant(
-    bank_account="shop@bank",
-    name="My Shop",
-    city="Phnom Penh"
-)
+
+# Validate token first
+if not client.validate_token():
+    print("Invalid token!")
+    client.close()
+    exit(1)
 
 # Step 1: Create QR for $50 payment
-qr = client.create_qr(
-    merchant=merchant,
+qr = client.create_qr_string(
+    merchant="shop@bank",
+    merchant_name="My Shop",
+    merchant_city="Phnom Penh",
     amount=50.00,
-    currency="USD"
+    currency="USD",
+    bill_number="TRX12345678",
+    static=False
 )
 
 print(f"Show this QR to customer: {qr.string}")
@@ -211,14 +244,17 @@ print(f"Payment ID (md5): {qr.md5}")
 # Step 2: Wait for customer to pay...
 # In real app, you might check in a loop or wait for webhook
 
-# Step 3: Check if customer paid
-status = client.check_payment(qr.md5)
-
-if status.is_paid:
-    print(f"Payment received! Amount: {status.amount}")
-    print(f"Status: {status.status}")  # e.g., "paid", "pending"
-else:
-    print("Payment not yet received")
+# Step 3: Check if customer paid (with retry logic)
+for _ in range(10):  # Check every 10 seconds, up to 10 times
+    status = client.check_payment(qr.md5)
+    
+    if status.is_paid:
+        print(f"Payment received! Amount: {status.amount}")
+        print(f"Status: {status.status}")  # e.g., "paid", "pending"
+        break
+    else:
+        print("Payment not yet received")
+        time.sleep(10)
 
 client.close()
 ```
@@ -233,8 +269,10 @@ client.close()
 - Customer scans and pays exact amount
 
 ```python
-qr = client.create_qr(
-    merchant=merchant,
+qr = client.create_qr_string(
+    merchant="shop@bank",
+    merchant_name="My Shop",
+    merchant_city="Phnom Penh",
     amount=100.00,    # Fixed amount
     currency="USD",
     static=False      # Dynamic (default)
@@ -247,8 +285,10 @@ qr = client.create_qr(
 - Can be reused (like displaying at store)
 
 ```python
-qr = client.create_qr(
-    merchant=merchant,
+qr = client.create_qr_string(
+    merchant="shop@bank",
+    merchant_name="My Shop",
+    merchant_city="Phnom Penh",
     amount=None,      # No amount - customer enters
     static=True       # Static QR
 )
@@ -267,12 +307,21 @@ from khqr_payment import AsyncKHQRClient
 async def process_payment():
     # Use 'async with' to automatically manage connection
     async with AsyncKHQRClient("your_token") as client:
-        qr = await client.create_qr(
+        # Validate token first
+        if not await client.validate_token():
+            print("Invalid token!")
+            return
+        
+        # Create QR
+        qr = await client.create_qr_string(
             merchant="shop@bank",
+            merchant_name="My Shop",
+            merchant_city="Phnom Penh",
             amount=50.00,
             currency="USD"
         )
         
+        # Check payment status
         status = await client.check_payment(qr.md5)
         print(f"Paid: {status.is_paid}")
 
@@ -492,6 +541,8 @@ client = KHQRClient(
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+For detailed guidelines, please see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
@@ -500,6 +551,22 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
+## Security
+
+For security vulnerabilities, please see [SECURITY.md](SECURITY.md).
+
+---
+
+## Sponsor
+
+If you find this library helpful, please consider sponsoring the project!
+
+[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/default-orange.png)](https://buymeacoffee.com/hengly)
+
+Your support helps maintain and improve this library!
+
+---
+
 ## License
 
-MIT License
+MIT License - see [LICENSE](LICENSE) file for details.

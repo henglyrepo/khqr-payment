@@ -4,12 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "khqr-payment"
-version = "1.0.0"
+version = "1.0.1"
 description = "A modern Python library for Bakong KHQR payment integration"
+homepage = "https://github.com/henglyrepo/khqr-payment"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "MIT License"}
 authors = [
-    {name = "Your Name", email = "your@email.com"}
+    {name = "Hengly Ear", email = "earhengly@gmail.com"}
 ]
 keywords = ["payment", "khqr", "bakong", "cambodia", "qrcode", "qr"]
 classifiers = [
