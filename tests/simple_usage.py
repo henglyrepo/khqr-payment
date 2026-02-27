@@ -1,13 +1,11 @@
 import time
-import qrcode
+from simple_config import api_token
 from khqr_payment import KHQRClient, Merchant
 
 BANK_ACCOUNT = "hengly_ear@aclb"  # Your Bakong account
 
 # 1. Initialize client with your token
-client = KHQRClient(
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkYXRhIjp7ImlkIjoiODVmYmVhODM3YTlhNDVkNSJ9LCJpYXQiOjE3NzIxNTEzMjEsImV4cCI6MTc3OTkyNzMyMX0.rFgNo7UcNzY6Z78BL0PeZT1pyGkUVavNHKXnEhFQ2F0"
-)
+client = KHQRClient(api_token)
 
 # Validate token before proceeding
 if client.validate_token():
@@ -31,7 +29,7 @@ merchant = Merchant(
     city="Phnom Penh",  # Your city
     store_label="Coffee Shop",
     phone_number="85566669999",
-    bill_number="TRX01234567",
+    bill_number="TRX987654321",
     terminal_label="Cashier-01",
     acquiring_bank="ACLB",  # Acquiring bank name
     account_information=None,  # For remittance (customer's account)
@@ -51,7 +49,7 @@ qr = client.create_qr_string(
     currency="USD",  # USD or KHR
     store_label="Coffee Shop",
     phone_number="85517272781",
-    bill_number="TRX019283775",
+    bill_number="TRX987654321",
     terminal_label="Cashier-01",
     static=False,  # Static or Dynamic QR code (default: False)
 )
@@ -60,19 +58,10 @@ qr = client.create_qr_string(
 print(f"QR String: {qr.string}")
 print(f"MD5 Hash: {qr.md5}")  # Use this to verify payment later
 
-# Generate and save QR image directly in one step (RECOMMENDED for banking apps)
+# Generate and save QR image from QRCode object (simplified!)
 # This generates QR from raw KHQR string - which is what banking apps scan!
 saved_path = client.generate_qr_image(
-    merchant="hengly_ear@aclb",
-    merchant_name="Coffee Shop",
-    merchant_city="Phnom Penh",
-    amount=0.01,
-    currency="USD",
-    store_label="Coffee Shop",
-    phone_number="85517272781",
-    bill_number="TRX019283775",
-    terminal_label="Cashier-01",
-    static=False,
+    qr,  # Pass the QRCode object directly!
     output_path="payment_qr.png",
 )
 print(f"QR image saved to: {saved_path}")
@@ -86,7 +75,7 @@ for _ in range(5):  # Check payment status every 10 seconds, up to 10 times
     else:
         print("Payment not yet received")
 
-    # time.sleep(10)  # Wait before checking again
+    time.sleep(10)  # Wait before checking again
 
 
 # Close connection when done

@@ -142,59 +142,42 @@ class AsyncKHQRClient:
 
     async def generate_qr_image(
         self,
-        merchant: Merchant | str,
-        amount: float | None = None,
-        currency: Literal["USD", "KHR"] = "USD",
-        store_label: str | None = None,
-        phone_number: str | None = None,
-        bill_number: str | None = None,
-        terminal_label: str | None = None,
-        purpose: str | None = None,
-        static: bool = False,
-        merchant_name: str | None = None,
-        merchant_city: str | None = None,
+        data: QRCode | str,
         output_path: str | None = None,
         format: Literal["png", "jpeg", "webp"] = "png",
     ) -> bytes | str:
         """
-        Generate QR code image directly in one step (async).
+        Generate QR code image from QRCode object or QR string (async).
 
         Args:
-            merchant: Merchant object or bank account string
-            amount: Transaction amount
-            currency: Currency code (USD/KHR)
-            store_label: Store label
-            phone_number: Phone number
-            bill_number: Bill number
-            terminal_label: Terminal label
-            purpose: Payment purpose
-            static: Static or Dynamic QR (default: False)
-            merchant_name: Merchant name (required if merchant is string)
-            merchant_city: Merchant city (required if merchant is string)
+            data: QRCode object from create_qr_string() or QR string directly
             output_path: Path to save the image (if None, returns bytes)
             format: Image format (png, jpeg, webp)
 
         Returns:
             Image bytes if output_path is None, otherwise the saved file path
+
+        Examples:
+            # Using QRCode object (recommended)
+            qr = await client.create_qr_string(merchant="shop@bank", ...)
+            await client.generate_qr_image(qr)
+
+            # Using QR string directly
+            await client.generate_qr_image(qr.string)
+
+            # Save to file
+            await client.generate_qr_image(qr, output_path="qr.png")
         """
-        qr = await self.create_qr_string(
-            merchant=merchant,
-            amount=amount,
-            currency=currency,
-            store_label=store_label,
-            phone_number=phone_number,
-            bill_number=bill_number,
-            terminal_label=terminal_label,
-            purpose=purpose,
-            static=static,
-            merchant_name=merchant_name,
-            merchant_city=merchant_city,
-        )
+        qr_string: str
+        if isinstance(data, QRCode):
+            qr_string = data.string
+        else:
+            qr_string = data
 
         if output_path:
-            return save_qr_image(qr.string, output_path, format=format)
+            return save_qr_image(qr_string, output_path, format=format)
 
-        return generate_qr_image(qr.string, format=format)
+        return generate_qr_image(qr_string, format=format)
 
     async def generate_deeplink(
         self,
