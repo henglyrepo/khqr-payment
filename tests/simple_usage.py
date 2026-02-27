@@ -81,3 +81,33 @@ for _ in range(5):  # Check payment status every 10 seconds, up to 10 times
 # Close connection when done
 client.close()
 print("Client connection closed.")
+
+# ============================================
+# Check Payment by MD5 Hash (Standalone Example)
+# ============================================
+# You can check payment using qr.md5 or a saved MD5 hash
+# Example: MD5 Hash from a previous transaction
+
+# Option 1: Use qr.md5 from current session
+MD5_HASH = qr.md5
+
+# Option 2: Use a saved MD5 hash string
+# MD5_HASH = "af0fdac4a8e1e55c095f93e95eb5d0c5"
+
+# Create new client for checking payment
+check_client = KHQRClient(api_token)
+
+try:
+    # Check payment status by MD5 hash
+    status = check_client.check_payment(MD5_HASH)
+
+    print(f"\n=== Payment Check Result ===")
+    print(f"MD5 Hash: {MD5_HASH}")
+    print(f"Status: {status.status}")  # "paid", "pending", "failed"
+    print(f"Is Paid: {status.is_paid}")
+    print(f"Amount: {status.amount}")
+    print(f"Currency: {status.currency}")
+
+finally:
+    check_client.close()
+    print("Check client closed.")
