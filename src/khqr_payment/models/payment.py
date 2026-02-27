@@ -13,13 +13,23 @@ class PaymentStatus(BaseModel):
 
     @classmethod
     def from_response(cls, md5: str, response: dict) -> "PaymentStatus":
-        """Create from API response."""
-        is_paid = response.get("status", "").upper() == "PAID"
-        return cls(
-            md5=md5,
-            is_paid=is_paid,
-            status=response.get("status", "UNPAID")
-        )
+        """Create from API response.
+
+        Handles different response formats:
+        - Old format: {"status": "PAID"}
+        - New format: {"responseCode": 0, "data": {...}}
+        """
+        # Check responseCode (new format): 0 = success/paid, 1 = error/unpaid
+        response_code = response.get("responseCode")
+        if response_code is not None:
+            is_paid = response_code == 0 and response.get("data") is not None
+            status = "PAID" if is_paid else "UNPAID"
+        else:
+            # Fallback to old format: {"status": "PAID"}
+            is_paid = response.get("status", "").upper() == "PAID"
+            status = response.get("status", "UNPAID")
+
+        return cls(md5=md5, is_paid=is_paid, status=status)
 
 
 class PaymentInfo(BaseModel):
@@ -32,7 +42,9 @@ class PaymentInfo(BaseModel):
     amount: float = Field(..., description="Payment amount")
     description: str | None = Field(None, description="Payment description")
     created_date_ms: int | None = Field(None, description="Created timestamp in milliseconds")
-    acknowledged_date_ms: int | None = Field(None, description="Acknowledged timestamp in milliseconds")
+    acknowledged_date_ms: int | None = Field(
+        None, description="Acknowledged timestamp in milliseconds"
+    )
     tracking_status: str | None = Field(None, description="Tracking status")
     receiver_bank: str | None = Field(None, description="Receiver bank")
     receiver_bank_account: str | None = Field(None, description="Receiver bank account")
@@ -64,8 +76,4 @@ class BulkPaymentStatus(BaseModel):
     @classmethod
     def from_response(cls, md5_list: list[str], response: list[str]) -> "BulkPaymentStatus":
         """Create from API response."""
-        return cls(
-            md5_list=response,
-            total_checked=len(md5_list),
-            total_paid=len(response)
-        )
+        return cls(md5_list=response, total_checked=len(md5_list), total_paid=len(response))
