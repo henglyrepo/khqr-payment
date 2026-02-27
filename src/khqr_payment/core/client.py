@@ -12,8 +12,9 @@ from khqr_payment.errors import (
 )
 from khqr_payment.models.payment import BulkPaymentStatus, PaymentInfo, PaymentStatus
 from khqr_payment.models.qr import Merchant, ParsedQRCode, QRCode, QRCodeRequest
-from khqr_payment.utils.deeplink import generate_deeplink
+from khqr_payment.utils.deeplink import generate_deeplink, generate_native_deeplink
 from khqr_payment.utils.qr_generator import generate_qr_string
+from khqr_payment.utils.qr_image import generate_qr_image, save_qr_image
 from khqr_payment.utils.qr_parser import parse_qr_string
 from khqr_payment.utils.validators import validate_request, validate_token
 
@@ -30,7 +31,7 @@ class KHQRClient:
     ):
         """
         Initialize KHQR client.
-        
+
         Args:
             token: Bakong API token
             use_sit: Use SIT environment (default: False for production)
@@ -45,8 +46,10 @@ class KHQRClient:
         self.timeout = timeout
 
         base_url = (
-            APIConstants.SIT_BASE_URL if use_sit
-            else APIConstants.RELAY_BASE_URL if use_relay
+            APIConstants.SIT_BASE_URL
+            if use_sit
+            else APIConstants.RELAY_BASE_URL
+            if use_relay
             else APIConstants.BASE_URL
         )
 
@@ -69,7 +72,7 @@ class KHQRClient:
         """Close the HTTP client."""
         self._client.close()
 
-    def create_qr(
+    def create_qr_string(
         self,
         merchant: Merchant | str,
         amount: float | None = None,
@@ -82,10 +85,15 @@ class KHQRClient:
         static: bool = False,
         merchant_name: str | None = None,
         merchant_city: str | None = None,
+        acquiring_bank: str | None = None,
+        account_information: str | None = None,
+        language_preference: str | None = None,
+        merchant_name_alternate: str | None = None,
+        merchant_city_alternate: str | None = None,
     ) -> QRCode:
         """
-        Create QR code for payment.
-        
+        Create QR string for payment.
+
         Args:
             merchant: Merchant object or bank account string
             amount: Transaction amount
@@ -98,13 +106,20 @@ class KHQRClient:
             static: Static or Dynamic QR (default: False)
             merchant_name: Merchant name (required if merchant is string)
             merchant_city: Merchant city (required if merchant is string)
-            
+            acquiring_bank: Acquiring bank name
+            account_information: Customer account info for remittance
+            language_preference: Language preference (en, kh)
+            merchant_name_alternate: Merchant name in alternate language
+            merchant_city_alternate: Merchant city in alternate language
+
         Returns:
             QRCode object with string and md5 hash
         """
         if isinstance(merchant, str):
             if not merchant_name or not merchant_city:
-                raise ValidationError("merchant_name and merchant_city are required when merchant is a string")
+                raise ValidationError(
+                    "merchant_name and merchant_city are required when merchant is a string"
+                )
             merchant = Merchant(bank_account=merchant, name=merchant_name, city=merchant_city)
 
         validate_request(amount, currency, merchant.bank_account, static)
@@ -116,11 +131,16 @@ class KHQRClient:
             postal_code=merchant.postal_code,
             amount=amount,
             currency=currency,
-            store_label=store_label,
-            phone_number=phone_number,
-            bill_number=bill_number,
-            terminal_label=terminal_label,
-            purpose=purpose,
+            acquiring_bank=acquiring_bank or merchant.acquiring_bank,
+            account_information=account_information or merchant.account_information,
+            store_label=store_label or merchant.store_label,
+            phone_number=phone_number or merchant.phone_number,
+            bill_number=bill_number or merchant.bill_number,
+            terminal_label=terminal_label or merchant.terminal_label,
+            purpose=purpose or merchant.purpose,
+            language_preference=language_preference or merchant.language_preference,
+            merchant_name_alternate=merchant_name_alternate or merchant.merchant_name_alternate,
+            merchant_city_alternate=merchant_city_alternate or merchant.merchant_city_alternate,
             static=static,
         )
 
@@ -135,6 +155,77 @@ class KHQRClient:
             merchant=merchant,
         )
 
+    def generate_qr_image(
+        self,
+        merchant: Merchant | str,
+        amount: float | None = None,
+        currency: Literal["USD", "KHR"] = "USD",
+        store_label: str | None = None,
+        phone_number: str | None = None,
+        bill_number: str | None = None,
+        terminal_label: str | None = None,
+        purpose: str | None = None,
+        static: bool = False,
+        merchant_name: str | None = None,
+        merchant_city: str | None = None,
+        output_path: str | None = None,
+        format: Literal["png", "jpeg", "webp"] = "png",
+        acquiring_bank: str | None = None,
+        account_information: str | None = None,
+        language_preference: str | None = None,
+        merchant_name_alternate: str | None = None,
+        merchant_city_alternate: str | None = None,
+    ) -> bytes | str:
+        """
+        Generate QR code image directly in one step.
+
+        Args:
+            merchant: Merchant object or bank account string
+            amount: Transaction amount
+            currency: Currency code (USD/KHR)
+            store_label: Store label
+            phone_number: Phone number
+            bill_number: Bill number
+            terminal_label: Terminal label
+            purpose: Payment purpose
+            static: Static or Dynamic QR (default: False)
+            merchant_name: Merchant name (required if merchant is string)
+            merchant_city: Merchant city (required if merchant is string)
+            output_path: Path to save the image (if None, returns bytes)
+            format: Image format (png, jpeg, webp)
+            acquiring_bank: Acquiring bank name
+            account_information: Customer account info for remittance
+            language_preference: Language preference (en, kh)
+            merchant_name_alternate: Merchant name in alternate language
+            merchant_city_alternate: Merchant city in alternate language
+
+        Returns:
+            Image bytes if output_path is None, otherwise the saved file path
+        """
+        qr = self.create_qr_string(
+            merchant=merchant,
+            amount=amount,
+            currency=currency,
+            store_label=store_label,
+            phone_number=phone_number,
+            bill_number=bill_number,
+            terminal_label=terminal_label,
+            purpose=purpose,
+            static=static,
+            merchant_name=merchant_name,
+            merchant_city=merchant_city,
+            acquiring_bank=acquiring_bank,
+            account_information=account_information,
+            language_preference=language_preference,
+            merchant_name_alternate=merchant_name_alternate,
+            merchant_city_alternate=merchant_city_alternate,
+        )
+
+        if output_path:
+            return save_qr_image(qr.string, output_path, format=format)
+
+        return generate_qr_image(qr.string, format=format)
+
     def generate_deeplink(
         self,
         qr_string: str,
@@ -144,13 +235,13 @@ class KHQRClient:
     ) -> str:
         """
         Generate deeplink from QR string.
-        
+
         Args:
             qr_string: QR string from create_qr
             callback: Callback URL after payment
             app_icon_url: App icon URL
             app_name: App name
-            
+
         Returns:
             Generated deeplink URL
         """
@@ -162,23 +253,47 @@ class KHQRClient:
             use_relay=self.use_relay,
         )
 
+    def generate_native_deeplink(
+        self,
+        qr_string: str,
+        callback: str,
+        app_scheme: str | None = None,
+    ) -> str:
+        """
+        Generate native app deeplink (bakong://payment?data=...).
+
+        Args:
+            qr_string: QR string from create_qr
+            callback: Callback URL after payment
+            app_scheme: Custom app scheme (e.g., myapp://)
+
+        Returns:
+            Native deeplink URL (bakong://payment?data=...)
+        """
+        return generate_native_deeplink(
+            qr_string=qr_string,
+            callback=callback,
+            app_scheme=app_scheme,
+        )
+
     def check_payment(self, md5_hash: str) -> PaymentStatus:
         """
         Check payment status.
-        
+
         Args:
             md5_hash: MD5 hash from QR code
-            
+
         Returns:
             PaymentStatus object
         """
         endpoint = (
-            APIConstants.RELAY_ENDPOINTS["check_payment"] if self.use_relay
+            APIConstants.RELAY_ENDPOINTS["check_payment"]
+            if self.use_relay
             else APIConstants.ENDPOINTS["check_payment"]
         )
 
         try:
-            response = self._client.post(endpoint, json={"hash": md5_hash})
+            response = self._client.post(endpoint, json={"md5": md5_hash})
 
             if response.status_code == 401:
                 raise InvalidTokenError("Invalid or expired token")
@@ -196,20 +311,21 @@ class KHQRClient:
     def get_payment(self, md5_hash: str) -> PaymentInfo:
         """
         Get payment information.
-        
+
         Args:
             md5_hash: MD5 hash from QR code
-            
+
         Returns:
             PaymentInfo object
         """
         endpoint = (
-            APIConstants.RELAY_ENDPOINTS["get_payment"] if self.use_relay
+            APIConstants.RELAY_ENDPOINTS["get_payment"]
+            if self.use_relay
             else APIConstants.ENDPOINTS["get_payment"]
         )
 
         try:
-            response = self._client.post(endpoint, json={"hash": md5_hash})
+            response = self._client.post(endpoint, json={"md5": md5_hash})
 
             if response.status_code == 401:
                 raise InvalidTokenError("Invalid or expired token")
@@ -227,10 +343,10 @@ class KHQRClient:
     def check_bulk_payments(self, md5_list: list[str]) -> BulkPaymentStatus:
         """
         Check multiple payment statuses.
-        
+
         Args:
             md5_list: List of MD5 hashes (max 50)
-            
+
         Returns:
             BulkPaymentStatus object
         """
@@ -238,7 +354,8 @@ class KHQRClient:
             raise ValidationError("Maximum 50 MD5 hashes allowed per request")
 
         endpoint = (
-            APIConstants.RELAY_ENDPOINTS["bulk_payment"] if self.use_relay
+            APIConstants.RELAY_ENDPOINTS["bulk_payment"]
+            if self.use_relay
             else APIConstants.ENDPOINTS["bulk_payment"]
         )
 
@@ -261,10 +378,10 @@ class KHQRClient:
     def parse_qr(self, qr_string: str) -> ParsedQRCode:
         """
         Parse QR string.
-        
+
         Args:
             qr_string: QR string to parse
-            
+
         Returns:
             ParsedQRCode object
         """
@@ -292,5 +409,81 @@ class KHQRClient:
         try:
             response = self._client.get("/api/v1/health")
             return response.status_code == 200
+        except Exception:
+            return False
+
+    def get_account_info(self, bank_account: str) -> dict:
+        """
+        Get account information for a Bakong account.
+
+        Args:
+            bank_account: Bakong account ID (e.g., "user@bank")
+
+        Returns:
+            dict: Account information
+
+        Raises:
+            InvalidTokenError: If token is invalid or expired
+            NetworkError: If network error occurs
+            APIError: If API returns an error
+        """
+        endpoint = (
+            APIConstants.RELAY_ENDPOINTS["account_info"]
+            if self.use_relay
+            else APIConstants.ENDPOINTS["account_info"]
+        )
+
+        try:
+            response = self._client.post(endpoint, json={"accountId": bank_account})
+
+            if response.status_code == 401:
+                raise InvalidTokenError("Invalid or expired token")
+            if response.status_code == 429:
+                raise RateLimitError("Rate limit exceeded")
+            if response.status_code >= 400:
+                raise APIError(f"API error: {response.text}", code=str(response.status_code))
+
+            return response.json()
+
+        except httpx.RequestError as e:
+            raise NetworkError(f"Network error: {str(e)}")
+
+    def get_merchant_info(self, bank_account: str) -> dict:
+        """
+        Get merchant information (alias for get_account_info).
+
+        Args:
+            bank_account: Bakong account ID (e.g., "user@bank")
+
+        Returns:
+            dict: Account/merchant information
+        """
+        return self.get_account_info(bank_account)
+
+    def validate_token(self) -> bool:
+        """
+        Validate if the token is valid and working.
+
+        Returns:
+            True if token is valid, False otherwise
+        """
+        try:
+            import hashlib
+
+            fake_md5 = hashlib.md5(b"test").hexdigest()
+            endpoint = (
+                APIConstants.RELAY_ENDPOINTS["check_payment"]
+                if self.use_relay
+                else APIConstants.ENDPOINTS["check_payment"]
+            )
+            response = self._client.post(endpoint, json={"md5": fake_md5})
+            if response.status_code == 401:
+                return False
+            return True
+        except Exception:
+            return False
+            if response.status_code >= 400:
+                return False
+            return True
         except Exception:
             return False

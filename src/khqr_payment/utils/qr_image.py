@@ -1,3 +1,4 @@
+import base64
 import io
 from typing import Literal
 
@@ -16,7 +17,7 @@ class QRImageGenerator:
 
     @staticmethod
     def generate(
-        qr_string: str,
+        data: str,
         format: Literal["png", "jpeg", "webp"] = "png",
         module_drawer: Literal["square", "gapped", "circle"] = "square",
         fill_color: tuple[int, int, int] = (0, 0, 0),
@@ -24,28 +25,14 @@ class QRImageGenerator:
         border: int = 4,
         box_size: int = 10,
     ) -> bytes:
-        """
-        Generate QR code image as bytes.
-        
-        Args:
-            qr_string: QR string to encode
-            format: Image format (png, jpeg, webp)
-            module_drawer: Module drawer style
-            fill_color: Foreground color (RGB)
-            back_color: Background color (RGB)
-            border: QR border size
-            box_size: Box size in pixels
-            
-        Returns:
-            Image bytes
-        """
+        """Generate QR code image as bytes."""
         qr = qrcode.QRCode(
             version=None,
             error_correction=qrcode.constants.ERROR_CORRECT_M,
             box_size=box_size,
             border=border,
         )
-        qr.add_data(qr_string)
+        qr.add_data(data)
         qr.make(fit=True)
 
         drawer_map = {
@@ -58,8 +45,8 @@ class QRImageGenerator:
             image_factory=StyledPilImage,
             module_drawer=drawer_map.get(module_drawer, SquareModuleDrawer()),
             color_mask=SolidFillColorMask(
-                front_color_fill=fill_color,
-                back_color_fill=back_color,
+                front_color=fill_color,
+                back_color=back_color,
             ),
         )
 
@@ -70,73 +57,32 @@ class QRImageGenerator:
         return buffer.getvalue()
 
     @staticmethod
-    def generate_base64(
-        qr_string: str,
-        format: Literal["png", "jpeg", "webp"] = "png",
-        **kwargs,
-    ) -> str:
-        """
-        Generate QR code as base64 string.
-        
-        Args:
-            qr_string: QR string to encode
-            format: Image format
-            **kwargs: Additional arguments for generate()
-            
-        Returns:
-            Base64 encoded image string
-        """
-        image_bytes = QRImageGenerator.generate(qr_string, format, **kwargs)
-        import base64
-        return base64.b64encode(image_bytes).decode()
-
-    @staticmethod
     def generate_base64_uri(
-        qr_string: str,
+        data: str,
         format: Literal["png", "jpeg", "webp"] = "png",
         **kwargs,
     ) -> str:
-        """
-        Generate QR code as base64 data URI.
-        
-        Args:
-            qr_string: QR string to encode
-            format: Image format
-            **kwargs: Additional arguments for generate()
-            
-        Returns:
-            Base64 data URI
-        """
-        base64_str = QRImageGenerator.generate_base64(qr_string, format, **kwargs)
+        """Generate QR code as base64 data URI."""
+        image_bytes = QRImageGenerator.generate(data, format, **kwargs)
+        base64_str = base64.b64encode(image_bytes).decode()
         format_map = {"png": "png", "jpeg": "jpeg", "webp": "webp"}
         mime_type = format_map.get(format, "png")
         return f"data:image/{mime_type};base64,{base64_str}"
 
     @staticmethod
     def save(
-        qr_string: str,
+        data: str,
         output_path: str,
         format: Literal["png", "jpeg", "webp"] | None = None,
         **kwargs,
     ) -> str:
-        """
-        Save QR code to file.
-        
-        Args:
-            qr_string: QR string to encode
-            output_path: Path to save the image
-            format: Image format (auto-detect from extension if None)
-            **kwargs: Additional arguments for generate()
-            
-        Returns:
-            Path to saved file
-        """
+        """Save QR code to file."""
         if format is None:
             format = output_path.split(".")[-1].lower()
             if format not in ("png", "jpeg", "webp"):
                 format = "png"
 
-        image_bytes = QRImageGenerator.generate(qr_string, format, **kwargs)
+        image_bytes = QRImageGenerator.generate(data, format, **kwargs)
 
         with open(output_path, "wb") as f:
             f.write(image_bytes)
@@ -145,37 +91,28 @@ class QRImageGenerator:
 
 
 def generate_qr_image(
-    qr_string: str,
+    data: str,
     format: Literal["png", "jpeg", "webp"] = "png",
     **kwargs,
 ) -> bytes:
     """Generate QR code image as bytes."""
-    return QRImageGenerator.generate(qr_string, format, **kwargs)
-
-
-def generate_qr_base64(
-    qr_string: str,
-    format: Literal["png", "jpeg", "webp"] = "png",
-    **kwargs,
-) -> str:
-    """Generate QR code as base64 string."""
-    return QRImageGenerator.generate_base64(qr_string, format, **kwargs)
+    return QRImageGenerator.generate(data, format, **kwargs)
 
 
 def generate_qr_base64_uri(
-    qr_string: str,
+    data: str,
     format: Literal["png", "jpeg", "webp"] = "png",
     **kwargs,
 ) -> str:
     """Generate QR code as base64 data URI."""
-    return QRImageGenerator.generate_base64_uri(qr_string, format, **kwargs)
+    return QRImageGenerator.generate_base64_uri(data, format, **kwargs)
 
 
 def save_qr_image(
-    qr_string: str,
+    data: str,
     output_path: str,
     format: Literal["png", "jpeg", "webp"] | None = None,
     **kwargs,
 ) -> str:
     """Save QR code to file."""
-    return QRImageGenerator.save(qr_string, output_path, format, **kwargs)
+    return QRImageGenerator.save(data, output_path, format, **kwargs)

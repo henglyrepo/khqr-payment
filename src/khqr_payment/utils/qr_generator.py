@@ -1,4 +1,5 @@
 import hashlib
+import time
 
 from khqr_payment.core.constants import QRConstants
 from khqr_payment.models.qr import QRCodeRequest
@@ -11,58 +12,81 @@ class QRStringGenerator:
     def generate(request: QRCodeRequest) -> tuple[str, str]:
         """
         Generate QR string from request.
-        
+
         Args:
             request: QRCodeRequest object
-            
+
         Returns:
             Tuple of (qr_string, md5_hash)
         """
         tags = []
 
-        tags.append(QRStringGenerator._create_tag(QRConstants.TAG_PAYLOAD_FORMAT, "01"))
-        tags.append(QRStringGenerator._create_tag(QRConstants.TAG_POINT_OF_INITIATION,
-                                                   "11" if not request.static else "12"))
+        # 00 - Payload Format Indicator
+        tags.append(
+            QRStringGenerator._create_tag(
+                QRConstants.TAG_PAYLOAD_FORMAT, QRConstants.DEFAULT_PAYLOAD_FORMAT
+            )
+        )
 
-        tags.append(QRStringGenerator._create_tag(QRConstants.TAG_MERCHANT_ID, request.bank_account))
-        tags.append(QRStringGenerator._create_tag(QRConstants.TAG_MERCHANT_NAME, request.merchant_name))
-        tags.append(QRStringGenerator._create_tag(QRConstants.TAG_MERCHANT_CITY, request.merchant_city))
+        # 01 - Point of Initiation Method (format: 01 + length + value)
+        point_of_initiation = "11" if request.static else "12"
+        tags.append(
+            QRStringGenerator._create_tag(QRConstants.TAG_POINT_OF_INITIATION, point_of_initiation)
+        )
 
-        if request.postal_code:
-            tags.append(QRStringGenerator._create_tag(QRConstants.TAG_POSTAL_CODE, request.postal_code))
+        # 29 - Merchant Account Information (Solo/Individual) with sub-tag 00
+        tags.append(QRStringGenerator._create_global_unique_identifier(request.bank_account))
 
-        additional_data = {}
-        if request.bill_number:
-            additional_data[QRConstants.TAG_BILL_NUMBER] = request.bill_number
-        if request.phone_number:
-            additional_data[QRConstants.TAG_MOBILE_NUMBER] = request.phone_number
-        if request.store_label:
-            additional_data[QRConstants.TAG_STORE_LABEL] = request.store_label
-        if request.terminal_label:
-            additional_data[QRConstants.TAG_TERMINAL_LABEL] = request.terminal_label
-        if request.purpose:
-            additional_data[QRConstants.TAG_PURPOSE] = request.purpose
+        # 52 - Merchant Category Code
+        tags.append(QRStringGenerator._create_tag(QRConstants.TAG_MCC, QRConstants.DEFAULT_MCC))
 
+        # 58 - Country Code
+        tags.append(
+            QRStringGenerator._create_tag(
+                QRConstants.TAG_COUNTRY_CODE, QRConstants.DEFAULT_COUNTRY_CODE
+            )
+        )
+
+        # 59 - Merchant Name
+        tags.append(
+            QRStringGenerator._create_tag(QRConstants.TAG_MERCHANT_NAME, request.merchant_name)
+        )
+
+        # 60 - Merchant City
+        tags.append(
+            QRStringGenerator._create_tag(QRConstants.TAG_MERCHANT_CITY, request.merchant_city)
+        )
+
+        # 99 - Timestamp (language preference + timestamp) - BEFORE amount!
+        tags.append(QRStringGenerator._generate_timestamp())
+
+        # 54 - Transaction Amount (only for dynamic QR)
+        if not request.static and request.amount is not None:
+            tags.append(QRStringGenerator._format_amount(request.amount))
+
+        # 53 - Transaction Currency
+        currency_code = "116" if request.currency == "KHR" else "840"
+        tags.append(QRStringGenerator._create_tag(QRConstants.TAG_CURRENCY, currency_code))
+
+        # 62 - Additional Data Field
+        additional_data = QRStringGenerator._build_additional_data(
+            bill_number=request.bill_number,
+            phone_number=request.phone_number,
+            store_label=request.store_label,
+            terminal_label=request.terminal_label,
+        )
         if additional_data:
-            additional_data_str = QRStringGenerator._build_additional_data(additional_data)
-            tags.append(QRStringGenerator._create_tag(QRConstants.TAG_ADDITIONAL_DATA, additional_data_str))
+            tags.append(additional_data)
 
-        if request.currency:
-            currency_tag = "5303734" if request.currency == "KHR" else "5303524"
-            tags.append(currency_tag)
+        qr_data = "".join(tags)
 
-        if request.amount is not None:
-            amount_str = QRStringGenerator._format_amount(request.amount, request.currency)
-            tags.append(amount_str)
+        # 63 - CRC
+        crc = QRStringGenerator._calculate_crc(qr_data)
+        qr_data += crc
 
-        qr_string = "".join(tags)
+        md5_hash = QRStringGenerator._calculate_md5(qr_data)
 
-        crc = QRStringGenerator._calculate_crc(qr_string)
-        qr_string += crc
-
-        md5_hash = QRStringGenerator._calculate_md5(qr_string)
-
-        return qr_string, md5_hash
+        return qr_data, md5_hash
 
     @staticmethod
     def _create_tag(tag_id: str, value: str) -> str:
@@ -71,41 +95,91 @@ class QRStringGenerator:
         return f"{tag_id}{length}{value}"
 
     @staticmethod
-    def _build_additional_data(data: dict[str, str]) -> str:
-        """Build additional data field."""
-        result = []
-        for key, value in data.items():
-            length = str(len(value)).zfill(2)
-            result.append(f"{key}{length}{value}")
-        return "".join(result)
+    def _create_global_unique_identifier(bank_account: str) -> str:
+        """Create global unique identifier (tag 29 with sub-tag 00)."""
+        # Sub-tag 00: Globally Unique Identifier
+        sub_tag = QRStringGenerator._create_tag(QRConstants.TAG_GLOBAL_UNIQUE_ID, bank_account)
+        # Tag 29: Merchant Account Information
+        return QRStringGenerator._create_tag(QRConstants.TAG_MERCHANT_ID, sub_tag)
 
     @staticmethod
-    def _format_amount(amount: float, currency: str) -> str:
-        """Format amount according to currency."""
-        if currency == "USD":
-            formatted = f"{amount:.2f}"
-        else:
-            formatted = str(int(amount))
-
-        return f"54{len(formatted):02d}{formatted}"
+    def _format_amount(amount: float) -> str:
+        """Format amount - 11 digits with leading zeros (dollar amount as integer)."""
+        amount_dollars = int(amount)
+        amount_str = str(amount_dollars).zfill(11)
+        return QRStringGenerator._create_tag(QRConstants.TAG_AMOUNT, amount_str)
 
     @staticmethod
-    def _calculate_crc(qr_string: str) -> str:
-        """Calculate CRC for QR string."""
+    def _build_additional_data(
+        bill_number: str | None = None,
+        phone_number: str | None = None,
+        store_label: str | None = None,
+        terminal_label: str | None = None,
+    ) -> str:
+        """Build additional data field with correct order."""
+        if not any([bill_number, phone_number, store_label, terminal_label]):
+            return ""
+
+        data_parts = []
+
+        # Order: bill_number (01), phone_number (02), store_label (03), terminal_label (07)
+        if bill_number:
+            data_parts.append(
+                QRStringGenerator._create_tag(QRConstants.TAG_BILL_NUMBER, bill_number)
+            )
+
+        if phone_number:
+            # Keep the full phone number (with 855 prefix)
+            digits = "".join(c for c in phone_number if c.isdigit())
+            data_parts.append(QRStringGenerator._create_tag(QRConstants.TAG_MOBILE_NUMBER, digits))
+
+        if store_label:
+            data_parts.append(
+                QRStringGenerator._create_tag(QRConstants.TAG_STORE_LABEL, store_label)
+            )
+
+        if terminal_label:
+            data_parts.append(
+                QRStringGenerator._create_tag(QRConstants.TAG_TERMINAL_LABEL, terminal_label)
+            )
+
+        combined = "".join(data_parts)
+        return QRStringGenerator._create_tag(QRConstants.TAG_ADDITIONAL_DATA, combined)
+
+    @staticmethod
+    def _generate_timestamp() -> str:
+        """Generate timestamp with language preference."""
+        # Current timestamp in milliseconds
+        timestamp = str(int(time.time() * 1000))
+
+        # Language preference + timestamp
+        lang_timestamp = QRStringGenerator._create_tag(
+            QRConstants.TAG_LANGUAGE_PREFERENCE, timestamp
+        )
+
+        # Wrap with tag 99
+        return QRStringGenerator._create_tag(QRConstants.TAG_TIMESTAMP, lang_timestamp)
+
+    @staticmethod
+    def _calculate_crc(qr_data: str) -> str:
+        """Calculate CRC-16 using CRC-CCITT polynomial."""
+        # Include 6304 in the calculation
+        data = qr_data + QRConstants.TAG_CRC + QRConstants.TAG_CRC_LENGTH
+
         crc = 0xFFFF
+        polynomial = 0x1021
 
-        for char in qr_string:
-            crc ^= ord(char)
+        for byte in data.encode("utf-8"):
+            crc ^= byte << 8
             for _ in range(8):
-                if crc & 0x0001:
-                    crc = (crc >> 1) ^ 0x8408
+                if crc & 0x8000:
+                    crc = (crc << 1) ^ polynomial
                 else:
-                    crc >>= 1
+                    crc <<= 1
+                crc &= 0xFFFF
 
-        crc ^= 0xFFFF
-        crc = hex(crc)[2:].upper().zfill(4)
-
-        return f"{QRConstants.TAG_CRC}{crc}"
+        crc_hex = format(crc, "04X")
+        return QRStringGenerator._create_tag(QRConstants.TAG_CRC, crc_hex)
 
     @staticmethod
     def _calculate_md5(qr_string: str) -> str:
@@ -116,10 +190,10 @@ class QRStringGenerator:
 def generate_qr_string(request: QRCodeRequest) -> tuple[str, str]:
     """
     Generate QR string from request.
-    
+
     Args:
         request: QRCodeRequest object
-        
+
     Returns:
         Tuple of (qr_string, md5_hash)
     """

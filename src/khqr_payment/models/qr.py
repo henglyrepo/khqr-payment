@@ -10,10 +10,26 @@ class Merchant(BaseModel):
     name: str = Field(..., min_length=1, max_length=25, description="Merchant name")
     city: str = Field(..., min_length=1, max_length=40, description="Merchant city")
     postal_code: str | None = Field(None, max_length=10, description="Postal code")
+    acquiring_bank: str | None = Field(None, max_length=32, description="Acquiring bank name")
+    account_information: str | None = Field(
+        None, max_length=32, description="Customer account info for remittance"
+    )
+    bill_number: str | None = Field(None, max_length=25, description="Bill number")
+    phone_number: str | None = Field(None, max_length=20, description="Phone number")
+    store_label: str | None = Field(None, max_length=25, description="Store label")
+    terminal_label: str | None = Field(None, max_length=25, description="Terminal label")
+    purpose: str | None = Field(None, max_length=25, description="Purpose of transaction")
+    language_preference: str | None = Field(
+        None, max_length=2, description="Language preference (en, kh)"
+    )
+    merchant_name_alternate: str | None = Field(
+        None, max_length=25, description="Merchant name in alternate language"
+    )
+    merchant_city_alternate: str | None = Field(
+        None, max_length=15, description="Merchant city in alternate language"
+    )
 
-    model_config = {
-        "str_strip_whitespace": True
-    }
+    model_config = {"str_strip_whitespace": True}
 
 
 class QRCode(BaseModel):
@@ -43,11 +59,18 @@ class QRCodeRequest(BaseModel):
     merchant_city: str = Field(..., min_length=1, max_length=40)
     amount: float | None = Field(None, ge=0, description="Transaction amount")
     currency: Literal["USD", "KHR"] = Field(default="USD")
+    acquiring_bank: str | None = Field(None, max_length=32, description="Acquiring bank name")
+    account_information: str | None = Field(
+        None, max_length=32, description="Customer account info for remittance"
+    )
     store_label: str | None = Field(None, max_length=25)
     phone_number: str | None = Field(None, max_length=20)
-    bill_number: str | None = Field(None, max_length=50)
+    bill_number: str | None = Field(None, max_length=25)
     terminal_label: str | None = Field(None, max_length=25)
-    purpose: str | None = Field(None, max_length=99)
+    purpose: str | None = Field(None, max_length=25)
+    language_preference: str | None = Field(None, max_length=2)
+    merchant_name_alternate: str | None = Field(None, max_length=25)
+    merchant_city_alternate: str | None = Field(None, max_length=15)
     static: bool = Field(default=False, description="Static or Dynamic QR")
     postal_code: str | None = Field(None, max_length=10)
 
@@ -57,7 +80,7 @@ class QRCodeRequest(BaseModel):
             bank_account=self.bank_account,
             name=self.merchant_name,
             city=self.merchant_city,
-            postal_code=self.postal_code
+            postal_code=self.postal_code,
         )
 
 

@@ -1,8 +1,7 @@
-from .deeplink import DeeplinkGenerator, generate_deeplink
+from .deeplink import DeeplinkGenerator, generate_deeplink, generate_native_deeplink
 from .qr_generator import QRStringGenerator, generate_qr_string
 from .qr_image import (
     QRImageGenerator,
-    generate_qr_base64,
     generate_qr_base64_uri,
     generate_qr_image,
     save_qr_image,
@@ -22,6 +21,7 @@ __all__ = [
     "parse_qr_string",
     "QRParser",
     "generate_deeplink",
+    "generate_native_deeplink",
     "DeeplinkGenerator",
     "validate_request",
     "validate_qr_string",
@@ -29,7 +29,6 @@ __all__ = [
     "QRValidator",
     "CurrencyConverter",
     "generate_qr_image",
-    "generate_qr_base64",
     "generate_qr_base64_uri",
     "save_qr_image",
     "QRImageGenerator",
