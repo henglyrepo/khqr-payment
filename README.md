@@ -5,7 +5,16 @@
 [![License](https://img.shields.io/pypi/l/khqr-payment)](https://github.com/henglyrepo/khqr-payment/blob/main/LICENSE)
 [![Sponsor](https://img.shields.io/badge/Sponsor-Buy%20Me%20a%20Coffee-orange)](https://buymeacoffee.com/hengly)
 
-A modern Python library for Bakong KHQR payment integration with a cleaner API, full type safety, and production-ready features.
+---
+
+> **Disclaimer**: This is an **unofficial, open-source library** and is **not affiliated with, endorsed by, or connected to Bakong, the National Bank of Cambodia, or any participating banks**.
+>
+> **Use at your own risk:**
+> - The developer assumes **no responsibility** for any damage, loss, corruption, or financial issues arising from the use of this library
+> - **Verify all payments** through official Bakong channels
+> - **Review the source code** before using in production
+> - **Test thoroughly** in sandbox/SIT environment before using with real money
+> - Comply with your bank's terms of service
 
 ---
 
