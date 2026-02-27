@@ -271,6 +271,7 @@ class KHQRClient:
                 raise APIError(f"API error: {response.text}", code=str(response.status_code))
 
             data = response.json()
+            print(f"DEBUG - Raw API response: {data}")
             return PaymentStatus.from_response(md5_hash, data)
 
         except httpx.RequestError as e:
