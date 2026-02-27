@@ -1,5 +1,6 @@
 from simple_config import api_token
 from khqr_payment import KHQRClient, Merchant
+import time
 
 BANK_ACCOUNT = "hengly_ear@aclb"  # Your Bakong account
 
@@ -67,11 +68,6 @@ print(f"QR image saved to: {saved_path}")
 
 # ============================================
 # Check Payment by MD5 Hash (Standalone Example)
-# ============================================
-# You can check payment using qr.md5 or a saved MD5 hash
-# Example: MD5 Hash from a previous transaction
-
-
 
 # Option 1: Use qr.md5 from current session
 MD5_HASH = qr.md5
@@ -90,11 +86,14 @@ for attempt in range(1, MAX_ATTEMPTS + 1):
         status = client.check_payment(MD5_HASH)
 
         print(f"Attempt {attempt}/{MAX_ATTEMPTS} - Status: {status.status}")
+        print(f"MD5: {status.md5}")  # Print MD5 to verify it matches the original QR code
 
         if status.is_paid:
             print(f"\n=== Payment Received! ===")
             print(f"Amount: {status.amount} {status.currency}")
             print(f"Status: {status.status}")
+            print(f"From: {status.from_account_id}")
+            print(f"To: {status.to_account_id}")
             break
         else:
             print(f"Payment not yet received, retrying in {CHECK_INTERVAL}s...")
