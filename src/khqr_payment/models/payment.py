@@ -10,6 +10,8 @@ class PaymentStatus(BaseModel):
     md5: str = Field(..., description="MD5 hash of the QR")
     is_paid: bool = Field(..., description="Whether payment has been made")
     status: Literal["PAID", "UNPAID"] = Field(..., description="Payment status")
+    amount: float | None = Field(None, description="Payment amount")
+    currency: str | None = Field(None, description="Currency code")
 
     @classmethod
     def from_response(cls, md5: str, response: dict) -> "PaymentStatus":
@@ -19,17 +21,25 @@ class PaymentStatus(BaseModel):
         - Old format: {"status": "PAID"}
         - New format: {"responseCode": 0, "data": {...}}
         """
+        amount: float | None = None
+        currency: str | None = None
+
         # Check responseCode (new format): 0 = success/paid, 1 = error/unpaid
         response_code = response.get("responseCode")
         if response_code is not None:
             is_paid = response_code == 0 and response.get("data") is not None
             status = "PAID" if is_paid else "UNPAID"
+            # Extract amount and currency from data
+            if is_paid and response.get("data"):
+                data = response["data"]
+                amount = data.get("amount")
+                currency = data.get("currency")
         else:
             # Fallback to old format: {"status": "PAID"}
             is_paid = response.get("status", "").upper() == "PAID"
             status = response.get("status", "UNPAID")
 
-        return cls(md5=md5, is_paid=is_paid, status=status)
+        return cls(md5=md5, is_paid=is_paid, status=status, amount=amount, currency=currency)
 
 
 class PaymentInfo(BaseModel):
