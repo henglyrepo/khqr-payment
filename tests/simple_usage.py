@@ -1,4 +1,3 @@
-import time
 from simple_config import api_token
 from khqr_payment import KHQRClient, Merchant
 
@@ -66,27 +65,13 @@ saved_path = client.generate_qr_image(
 )
 print(f"QR image saved to: {saved_path}")
 
-# Verify payment (after customer has paid)
-for _ in range(5):  # Check payment status every 10 seconds, up to 10 times
-    status = client.check_payment(qr.md5)
-    if status.is_paid:
-        print(f"Payment received! Amount: {status.amount}")
-        print(f"Status: {status.status}")  # e.g., "paid", "pending"
-    else:
-        print("Payment not yet received")
-
-    time.sleep(10)  # Wait before checking again
-
-
-# Close connection when done
-client.close()
-print("Client connection closed.")
-
 # ============================================
 # Check Payment by MD5 Hash (Standalone Example)
 # ============================================
 # You can check payment using qr.md5 or a saved MD5 hash
 # Example: MD5 Hash from a previous transaction
+
+
 
 # Option 1: Use qr.md5 from current session
 MD5_HASH = qr.md5
@@ -94,20 +79,35 @@ MD5_HASH = qr.md5
 # Option 2: Use a saved MD5 hash string
 # MD5_HASH = "af0fdac4a8e1e55c095f93e95eb5d0c5"
 
-# Create new client for checking payment
-check_client = KHQRClient(api_token)
+# Check payment with retry (every 5 seconds, timeout 2 minutes)
+MAX_ATTEMPTS = 24  # 24 * 5 seconds = 2 minutes
+CHECK_INTERVAL = 5  # seconds
 
-try:
-    # Check payment status by MD5 hash
-    status = check_client.check_payment(MD5_HASH)
+print(f"\n=== Waiting for payment (timeout: 2 minutes) ===")
 
-    print(f"\n=== Payment Check Result ===")
-    print(f"MD5 Hash: {MD5_HASH}")
-    print(f"Status: {status.status}")  # "paid", "pending", "failed"
-    print(f"Is Paid: {status.is_paid}")
-    print(f"Amount: {status.amount}")
-    print(f"Currency: {status.currency}")
+for attempt in range(1, MAX_ATTEMPTS + 1):
+    try:
+        status = client.check_payment(MD5_HASH)
 
-finally:
-    check_client.close()
-    print("Check client closed.")
+        print(f"Attempt {attempt}/{MAX_ATTEMPTS} - Status: {status.status}")
+
+        if status.is_paid:
+            print(f"\n=== Payment Received! ===")
+            print(f"Amount: {status.amount} {status.currency}")
+            print(f"Status: {status.status}")
+            break
+        else:
+            print(f"Payment not yet received, retrying in {CHECK_INTERVAL}s...")
+
+    except Exception as e:
+        print(f"Error checking payment: {e}")
+
+    if attempt < MAX_ATTEMPTS:
+        time.sleep(CHECK_INTERVAL)
+else:
+    print("\n=== Payment timeout (2 minutes) ===")
+    print("Payment was not received within the timeout period.")
+
+# Close connection when done
+client.close()
+print("Client closed.")
